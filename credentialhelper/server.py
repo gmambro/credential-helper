@@ -62,15 +62,16 @@ class Cache(object):
 class Server(BaseProtocolHandler):
 
     def __init__(self, config):
-        self.socket_path = config.get_socket_path()
+        self._socket_path = config.get_socket_path()
         self._sock = None
-        self.do_loop = True
+        self._do_loop = True
         self._cache = Cache(config)
+        self._config = config
 
     def listen(self):
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 
-        socket_path = self.socket_path
+        socket_path = self._socket_path
         if os.path.exists(socket_path):
             os.unlink(socket_path)
         sock.bind(socket_path)
@@ -79,7 +80,7 @@ class Server(BaseProtocolHandler):
         
     def loop(self):
         sock = self._sock
-        while self.do_loop:
+        while self._do_loop:
             connection, client_address = sock.accept()
 
             try:
@@ -120,24 +121,32 @@ class Server(BaseProtocolHandler):
         if entry:
             response['username'] = entry.username
             response['password'] = entry.password
+        else:
+            default_username = self._config.get_user_for_service(service)
+            if default_username:
+                logging.debug('setting default username for service')
+                response['username'] = default_username
 
+            
         self.write_stanza(fh, response)
 
     def handle_set(self, fh, request):
-        service  = request['service']
-        username = request['username']
-        password = request['password']
-        timeout  = request.get('timeout')
+        response = dict()
 
-        if service:
-            logging.debug("updating service %s", service)
-            self._cache.set(service, username, password, timeout)
-            
-            response = dict()
-            response['status'] = 'OK'
-        else:
-            response['status'] = 'Error'
+        try:
+            service  = request['service']
+            username = request['username']
+            password = request['password']
+            timeout  = request.get('timeout')
 
+            if service:
+                logging.debug("updating service %s", service)
+                self._cache.set(service, username, password, timeout)        
+                response['status'] = 'OK'
+        finally:
+            if not 'status' in response:
+                response['status'] = 'Error'
+        
         self.write_stanza(fh, response)           
         
     def close(self):
@@ -146,6 +155,5 @@ class Server(BaseProtocolHandler):
             self._sock = None
 
         # clean up socket file
-        if os.path.exists(self.socket_path):
-            os.unlink(self.socket_path)
-
+        if os.path.exists(self._socket_path):
+            os.unlink(self._socket_path)

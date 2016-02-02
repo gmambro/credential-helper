@@ -18,7 +18,7 @@ class Client(BaseProtocolHandler):
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 
         # Connect the socket to the port where the server is listening        
-        logging.debug("connecting to %s")
+        logging.debug("connecting to %s", self._socket_path)
         try:
             sock.connect(self._socket_path)            
         except socket.error as error:
